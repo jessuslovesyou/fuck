@@ -9,474 +9,564 @@ import {
   Easing,
 } from "remotion";
 
-// ─── Brand Constants ─────────────────────────────────────────────
-const BRAND = {
-  black: "#0A0A0A",
+// ─── Constants ───────────────────────────────────────────────────
+const C = {
+  bg: "#0A0A0A",
   white: "#F5F5F5",
-  grey: "#888888",
+  grey: "#666666",
+  greyLight: "#333333",
+  red: "#FF3B3B",
+  redDark: "#CC2222",
+  green: "#2ECC71",
+  greenDark: "#1B9E50",
+  orange: "#FF6B35",
+  hotPink: "#FF3CAC",
+  blue: "#2B86C5",
   gradient: "linear-gradient(135deg, #FF6B35, #FF3CAC, #784BA0, #2B86C5)",
-  gradientAlt: "linear-gradient(90deg, #FF3CAC, #784BA0, #2B86C5)",
   font: "Inter, Helvetica, Arial, sans-serif",
 };
 
-// ─── Scene 1: Logo Reveal ────────────────────────────────────────
-const LogoReveal: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  // Caret draws in first
-  const caretScale = spring({
-    frame: frame - 5,
-    fps,
-    config: { damping: 12, stiffness: 200, mass: 0.4 },
-  });
-
-  const caretOpacity = interpolate(frame, [0, 8], [0, 1], {
-    extrapolateRight: "clamp",
-  });
-
-  // Then "Sriracha" fades in
-  const textOpacity = interpolate(frame, [18, 35], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
-  const textSlide = interpolate(frame, [18, 40], [30, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
-  });
-
-  // "Creative" slides in after
-  const creativeOpacity = interpolate(frame, [32, 48], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
-  const creativeSlide = interpolate(frame, [32, 50], [20, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
-  });
-
-  // Gradient line sweep
-  const lineWidth = interpolate(frame, [50, 75], [0, 400], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
-  });
-
-  return (
-    <AbsoluteFill
-      style={{
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: BRAND.black,
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 0 }}>
-          <span
-            style={{
-              fontSize: 120,
-              fontFamily: BRAND.font,
-              fontWeight: 700,
-              color: BRAND.white,
-              opacity: textOpacity,
-              transform: `translateX(${textSlide}px)`,
-              letterSpacing: "-2px",
-            }}
-          >
-            Sriracha
-          </span>
-          <span
-            style={{
-              fontSize: 120,
-              fontFamily: BRAND.font,
-              fontWeight: 700,
-              background: BRAND.gradient,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              opacity: caretOpacity,
-              transform: `scale(${caretScale})`,
-              marginLeft: 4,
-            }}
-          >
-            ^
-          </span>
-        </div>
-        <span
-          style={{
-            fontSize: 42,
-            fontFamily: BRAND.font,
-            fontWeight: 300,
-            color: BRAND.grey,
-            letterSpacing: "16px",
-            textTransform: "uppercase",
-            opacity: creativeOpacity,
-            transform: `translateY(${creativeSlide}px)`,
-            marginTop: 8,
-          }}
-        >
-          Creative
-        </span>
-        <div
-          style={{
-            width: lineWidth,
-            height: 3,
-            background: BRAND.gradient,
-            marginTop: 30,
-            borderRadius: 2,
-          }}
-        />
-      </div>
-    </AbsoluteFill>
-  );
+// ─── Helpers ─────────────────────────────────────────────────────
+// Deterministic pseudo-random based on index
+const pseudoRandom = (i: number) => {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
 };
 
-// ─── Scene 2: The ^ Symbol ───────────────────────────────────────
-const SymbolScene: React.FC = () => {
+// Which 3 out of 50 pass (deterministic)
+const PASS_INDICES = new Set([7, 23, 41]);
+
+// ─── Scene 1: 50-Thumbnail Grid (0:00–0:03 = frames 0–89) ──────
+const ThumbnailGrid: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const titleOpacity = interpolate(frame, [0, 15], [0, 1], {
+  // Phase 1: Grid appears (0–30)
+  // Phase 2: Stamps appear (30–65)
+  // Phase 3: "94% FAIL RATE" text (55–89)
+
+  const TOTAL = 50;
+  const COLS = 10;
+  const ROWS = 5;
+  const CELL_W = 152;
+  const CELL_H = 100;
+  const GAP = 8;
+  const gridW = COLS * (CELL_W + GAP) - GAP;
+  const gridH = ROWS * (CELL_H + GAP) - GAP;
+
+  // Stat counter
+  const failCount = Math.min(
+    47,
+    Math.floor(
+      interpolate(frame, [30, 60], [0, 47], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      })
+    )
+  );
+
+  const statOpacity = interpolate(frame, [55, 68], [0, 1], {
+    extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
-  // Large caret in background
-  const bgCaretScale = spring({
-    frame: frame - 5,
+  const statScale = spring({
+    frame: Math.max(0, frame - 55),
     fps,
-    config: { damping: 15, stiffness: 60, mass: 1 },
+    config: { damping: 8, stiffness: 150, mass: 0.5 },
   });
-
-  const bgCaretRotation = interpolate(frame, [0, 90], [0, 5], {
-    extrapolateRight: "clamp",
-  });
-
-  // Taglines appear sequentially
-  const taglines = [
-    { text: "we create", accent: "magic", delay: 15 },
-    { text: "design", accent: "growth", delay: 35 },
-    { text: "Sriracha", accent: "Creative", delay: 55 },
-  ];
 
   return (
     <AbsoluteFill
       style={{
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: BRAND.black,
+        backgroundColor: C.bg,
       }}
     >
-      {/* Giant background caret */}
-      <span
-        style={{
-          position: "absolute",
-          fontSize: 800,
-          fontFamily: BRAND.font,
-          fontWeight: 900,
-          background: BRAND.gradient,
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          opacity: 0.06,
-          transform: `scale(${bgCaretScale}) rotate(${bgCaretRotation}deg)`,
-        }}
-      >
-        ^
-      </span>
-
-      {/* Section title */}
+      {/* Grid */}
       <div
         style={{
-          position: "absolute",
-          top: 120,
-          left: 120,
-          opacity: titleOpacity,
+          display: "flex",
+          flexWrap: "wrap",
+          width: gridW,
+          gap: GAP,
+          position: "relative",
         }}
       >
-        <span
-          style={{
-            fontSize: 18,
-            fontFamily: BRAND.font,
-            fontWeight: 400,
-            color: BRAND.grey,
-            letterSpacing: "6px",
-            textTransform: "uppercase",
-          }}
-        >
-          01 — Symbol
-        </span>
-      </div>
+        {Array.from({ length: TOTAL }).map((_, i) => {
+          const row = Math.floor(i / COLS);
+          const col = i % COLS;
+          const delay = (row * 2 + col) * 0.6;
+          const isPassing = PASS_INDICES.has(i);
 
-      {/* Taglines */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 24, zIndex: 2 }}>
-        {taglines.map((tag, i) => {
-          const tagOpacity = interpolate(frame, [tag.delay, tag.delay + 12], [0, 1], {
+          // Card appear
+          const cardOpacity = interpolate(frame, [delay, delay + 8], [0, 1], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
           });
-          const tagSlide = interpolate(frame, [tag.delay, tag.delay + 15], [40, 0], {
+
+          const cardScale = interpolate(frame, [delay, delay + 8], [0.7, 1], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
             easing: Easing.out(Easing.cubic),
           });
 
+          // Stamp appear
+          const stampDelay = 30 + pseudoRandom(i) * 25;
+          const stampOpacity = interpolate(frame, [stampDelay, stampDelay + 4], [0, 1], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
+
+          const stampScale = spring({
+            frame: Math.max(0, frame - stampDelay),
+            fps,
+            config: { damping: 6, stiffness: 200, mass: 0.3 },
+          });
+
+          // Color tint
+          const tintOpacity = interpolate(frame, [stampDelay, stampDelay + 6], [0, 0.7], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
+
+          // Fake website content bars
+          const barColor = `rgba(255,255,255,${0.08 + pseudoRandom(i + 100) * 0.06})`;
+
           return (
             <div
               key={i}
               style={{
-                opacity: tagOpacity,
-                transform: `translateY(${tagSlide}px)`,
-                display: "flex",
-                alignItems: "baseline",
-                gap: 0,
+                width: CELL_W,
+                height: CELL_H,
+                borderRadius: 6,
+                backgroundColor: "#1A1A1A",
+                border: "1px solid #2A2A2A",
+                position: "relative",
+                overflow: "hidden",
+                opacity: cardOpacity,
+                transform: `scale(${cardScale})`,
               }}
             >
-              <span
+              {/* Fake website skeleton */}
+              <div style={{ padding: 8 }}>
+                {/* Nav bar */}
+                <div
+                  style={{
+                    width: "40%",
+                    height: 4,
+                    backgroundColor: barColor,
+                    borderRadius: 2,
+                    marginBottom: 6,
+                  }}
+                />
+                {/* Hero block */}
+                <div
+                  style={{
+                    width: "100%",
+                    height: 20,
+                    backgroundColor: barColor,
+                    borderRadius: 3,
+                    marginBottom: 5,
+                  }}
+                />
+                {/* Text lines */}
+                <div style={{ width: "80%", height: 3, backgroundColor: barColor, borderRadius: 1, marginBottom: 3 }} />
+                <div style={{ width: "60%", height: 3, backgroundColor: barColor, borderRadius: 1, marginBottom: 3 }} />
+                <div style={{ width: "70%", height: 3, backgroundColor: barColor, borderRadius: 1, marginBottom: 5 }} />
+                {/* Small button */}
+                <div style={{ width: "30%", height: 6, backgroundColor: barColor, borderRadius: 2 }} />
+              </div>
+
+              {/* Red/Green tint overlay */}
+              <div
                 style={{
-                  fontSize: 72,
-                  fontFamily: BRAND.font,
-                  fontWeight: 300,
-                  color: BRAND.white,
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: isPassing ? C.green : C.red,
+                  opacity: tintOpacity,
+                  borderRadius: 6,
+                }}
+              />
+
+              {/* FAIL / PASS stamp */}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  opacity: stampOpacity,
                 }}
               >
-                {tag.text}
-              </span>
-              <span
-                style={{
-                  fontSize: 72,
-                  fontFamily: BRAND.font,
-                  fontWeight: 700,
-                  background: BRAND.gradient,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  marginLeft: 0,
-                }}
-              >
-                ^
-              </span>
-              <span
-                style={{
-                  fontSize: 72,
-                  fontFamily: BRAND.font,
-                  fontWeight: 300,
-                  color: BRAND.grey,
-                  marginLeft: 16,
-                }}
-              >
-                {tag.accent}
-              </span>
+                <div
+                  style={{
+                    transform: `scale(${stampScale}) rotate(${isPassing ? -8 : -12}deg)`,
+                    border: `3px solid ${isPassing ? C.green : C.red}`,
+                    borderRadius: 4,
+                    padding: "4px 12px",
+                    backgroundColor: isPassing ? "rgba(46,204,113,0.15)" : "rgba(255,59,59,0.15)",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 18,
+                      fontFamily: C.font,
+                      fontWeight: 900,
+                      color: isPassing ? C.green : C.red,
+                      letterSpacing: "3px",
+                    }}
+                  >
+                    {isPassing ? "PASS" : "FAIL"}
+                  </span>
+                </div>
+              </div>
             </div>
           );
         })}
+      </div>
+
+      {/* 94% FAIL RATE overlay */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 80,
+          opacity: statOpacity,
+          transform: `scale(${statScale})`,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            background: "rgba(10,10,10,0.9)",
+            border: `2px solid ${C.red}`,
+            borderRadius: 12,
+            padding: "16px 48px",
+            backdropFilter: "blur(10px)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 64,
+              fontFamily: C.font,
+              fontWeight: 900,
+              color: C.red,
+            }}
+          >
+            94% FAIL RATE
+          </span>
+        </div>
       </div>
     </AbsoluteFill>
   );
 };
 
-// ─── Scene 3: Safe Area / Logo System ────────────────────────────
-const SafeAreaScene: React.FC = () => {
+// ─── Scene 2: Heatmap Zoom (0:03–0:08 = frames 0–149) ──────────
+const HeatmapZoom: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const titleOpacity = interpolate(frame, [0, 15], [0, 1], {
-    extrapolateRight: "clamp",
-  });
+  // Phase 1: Zoom into a mobile phone frame (0–20)
+  // Phase 2: Heatmap overlay appears scattered (20–60)
+  // Phase 3: Cursor scrolls down (60–110)
+  // Phase 4: "FRICTION DETECTED" warning (100–149)
 
-  const logoScale = spring({
-    frame: frame - 10,
+  const phoneScale = spring({
+    frame: frame,
     fps,
-    config: { damping: 14, stiffness: 100, mass: 0.6 },
+    config: { damping: 12, stiffness: 80, mass: 0.6 },
   });
 
-  // Safe area box animates in
-  const boxOpacity = interpolate(frame, [25, 40], [0, 1], {
+  // Heatmap blob opacity
+  const heatOpacity = interpolate(frame, [20, 40], [0, 0.7], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
-  const boxScale = spring({
-    frame: Math.max(0, frame - 25),
-    fps,
-    config: { damping: 14, stiffness: 80, mass: 0.7 },
+  // Scroll position (cursor/content moves down)
+  const scrollY = interpolate(frame, [60, 110], [0, 280], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.inOut(Easing.cubic),
   });
 
-  // Measurement lines
-  const measureOpacity = interpolate(frame, [40, 55], [0, 1], {
+  // Cursor position
+  const cursorOpacity = interpolate(frame, [55, 65], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+
+  // Warning
+  const warningOpacity = interpolate(frame, [100, 115], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  const warningScale = spring({
+    frame: Math.max(0, frame - 100),
+    fps,
+    config: { damping: 8, stiffness: 150, mass: 0.4 },
+  });
+
+  // Warning flash
+  const flashIntensity = frame > 100 && frame < 130 ? (Math.sin(frame * 0.8) > 0 ? 1 : 0.7) : 1;
 
   return (
     <AbsoluteFill
       style={{
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: BRAND.black,
+        backgroundColor: C.bg,
       }}
     >
+      {/* Phone frame */}
       <div
         style={{
-          position: "absolute",
-          top: 120,
-          left: 120,
-          opacity: titleOpacity,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 18,
-            fontFamily: BRAND.font,
-            fontWeight: 400,
-            color: BRAND.grey,
-            letterSpacing: "6px",
-            textTransform: "uppercase",
-          }}
-        >
-          02 — Logo Safe Area
-        </span>
-      </div>
-
-      {/* Logo centered */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          transform: `scale(${logoScale})`,
+          width: 340,
+          height: 620,
+          borderRadius: 32,
+          border: "3px solid #333",
+          backgroundColor: "#111",
+          overflow: "hidden",
+          transform: `scale(${phoneScale})`,
           position: "relative",
         }}
       >
-        {/* Safe area border */}
+        {/* Phone notch */}
         <div
           style={{
+            width: 120,
+            height: 24,
+            backgroundColor: "#111",
+            borderRadius: "0 0 16px 16px",
             position: "absolute",
-            inset: -60,
-            border: `2px dashed rgba(255,255,255,0.15)`,
-            opacity: boxOpacity,
-            transform: `scale(${boxScale})`,
+            top: 0,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 20,
+            border: "1px solid #333",
+            borderTop: "none",
           }}
         />
 
-        {/* Corner marks */}
-        {boxOpacity > 0 &&
-          [
-            { top: -60, left: -60, borderTop: "2px solid", borderLeft: "2px solid" },
-            { top: -60, right: -60, borderTop: "2px solid", borderRight: "2px solid" },
-            { bottom: -60, left: -60, borderBottom: "2px solid", borderLeft: "2px solid" },
-            { bottom: -60, right: -60, borderBottom: "2px solid", borderRight: "2px solid" },
-          ].map((pos, i) => (
+        {/* Scrollable content area */}
+        <div style={{ padding: "36px 16px 16px", transform: `translateY(-${scrollY}px)` }}>
+          {/* Fake nav */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ width: 60, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+            <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ width: 20, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+              <div style={{ width: 20, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+              <div style={{ width: 20, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+            </div>
+          </div>
+
+          {/* Vague hero */}
+          <div style={{ marginBottom: 16, padding: "20px 0" }}>
+            <span style={{ fontSize: 16, fontFamily: C.font, fontWeight: 600, color: "#555" }}>
+              Welcome to Our Brand
+            </span>
+            <div style={{ marginTop: 8 }}>
+              <span style={{ fontSize: 10, fontFamily: C.font, color: "#444", lineHeight: 1.5 }}>
+                We are passionate about delivering excellence and innovation to our valued customers.
+              </span>
+            </div>
+          </div>
+
+          {/* Filler content blocks */}
+          {[1, 2, 3, 4, 5].map((_, idx) => (
+            <div key={idx} style={{ marginBottom: 14 }}>
+              <div style={{ width: "100%", height: 50, backgroundColor: "#1A1A1A", borderRadius: 6, marginBottom: 6 }} />
+              <div style={{ width: "85%", height: 5, backgroundColor: "#1E1E1E", borderRadius: 2, marginBottom: 3 }} />
+              <div style={{ width: "65%", height: 5, backgroundColor: "#1E1E1E", borderRadius: 2 }} />
+            </div>
+          ))}
+
+          {/* Button buried way down */}
+          <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
+            <div
+              style={{
+                padding: "8px 24px",
+                backgroundColor: "#2A2A2A",
+                borderRadius: 6,
+                border: "1px solid #444",
+              }}
+            >
+              <span style={{ fontSize: 10, fontFamily: C.font, fontWeight: 600, color: "#888" }}>
+                Buy Now
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Heatmap overlay - scattered blobs */}
+        <div style={{ position: "absolute", inset: 0, opacity: heatOpacity, pointerEvents: "none" }}>
+          {/* Random scattered heat spots - confused user behavior */}
+          {[
+            { x: 20, y: 80, size: 80, color: "rgba(255,165,0,0.35)" },
+            { x: 180, y: 150, size: 60, color: "rgba(255,100,0,0.25)" },
+            { x: 70, y: 250, size: 50, color: "rgba(255,200,0,0.2)" },
+            { x: 240, y: 320, size: 70, color: "rgba(255,130,0,0.3)" },
+            { x: 140, y: 400, size: 55, color: "rgba(255,180,0,0.2)" },
+            { x: 50, y: 480, size: 65, color: "rgba(255,80,0,0.25)" },
+            { x: 200, y: 200, size: 40, color: "rgba(255,220,0,0.15)" },
+          ].map((blob, i) => (
             <div
               key={i}
               style={{
                 position: "absolute",
-                width: 20,
-                height: 20,
-                ...pos,
-                borderColor: "rgba(255,60,172,0.6)",
-                opacity: boxOpacity,
-              } as React.CSSProperties}
+                left: blob.x - blob.size / 2,
+                top: blob.y - blob.size / 2,
+                width: blob.size,
+                height: blob.size,
+                borderRadius: "50%",
+                background: `radial-gradient(circle, ${blob.color}, transparent 70%)`,
+              }}
             />
           ))}
+        </div>
 
-        {/* "C" measurement label */}
+        {/* Cursor hand */}
         <div
           style={{
             position: "absolute",
-            right: -110,
-            top: "50%",
-            transform: "translateY(-50%)",
-            opacity: measureOpacity,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
+            right: 40,
+            top: 280 + scrollY * 0.3,
+            opacity: cursorOpacity,
+            fontSize: 28,
+            zIndex: 15,
+            filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
           }}
         >
-          <div style={{ width: 30, height: 1, background: "rgba(255,60,172,0.5)" }} />
-          <span
-            style={{
-              fontSize: 16,
-              fontFamily: BRAND.font,
-              color: "rgba(255,60,172,0.7)",
-              fontWeight: 500,
-            }}
-          >
-            C
-          </span>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "baseline" }}>
-          <span
-            style={{
-              fontSize: 80,
-              fontFamily: BRAND.font,
-              fontWeight: 700,
-              color: BRAND.white,
-              letterSpacing: "-1px",
-            }}
-          >
-            Sriracha
-          </span>
-          <span
-            style={{
-              fontSize: 80,
-              fontFamily: BRAND.font,
-              fontWeight: 700,
-              background: BRAND.gradient,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            ^
-          </span>
+          <svg width="24" height="28" viewBox="0 0 24 28" fill="none">
+            <path d="M5 2L5 18L9 14L13 22L16 20L12 12L18 12L5 2Z" fill="white" stroke="#333" strokeWidth="1.5" />
+          </svg>
         </div>
       </div>
 
-      {/* Bottom note */}
+      {/* FRICTION DETECTED warning */}
       <div
         style={{
           position: "absolute",
-          bottom: 120,
-          opacity: measureOpacity,
-          textAlign: "center",
+          bottom: 100,
+          opacity: warningOpacity * flashIntensity,
+          transform: `scale(${warningScale})`,
         }}
       >
-        <span
+        <div
           style={{
-            fontSize: 20,
-            fontFamily: BRAND.font,
-            fontWeight: 300,
-            color: BRAND.grey,
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            background: "rgba(255,59,59,0.1)",
+            border: `2px solid ${C.red}`,
+            borderRadius: 12,
+            padding: "18px 40px",
           }}
         >
-          Minimum clear space defined by caret height unit &quot;C&quot;
-        </span>
+          <span style={{ fontSize: 36 }}>&#9888;&#65039;</span>
+          <span
+            style={{
+              fontSize: 36,
+              fontFamily: C.font,
+              fontWeight: 800,
+              color: C.red,
+              letterSpacing: "3px",
+            }}
+          >
+            FRICTION DETECTED
+          </span>
+        </div>
       </div>
     </AbsoluteFill>
   );
 };
 
-// ─── Scene 4: Color Palette ──────────────────────────────────────
-const ColorPalette: React.FC = () => {
+// ─── Scene 3: The Fix (0:08–0:15 = frames 0–209) ────────────────
+const TheFix: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const titleOpacity = interpolate(frame, [0, 15], [0, 1], {
-    extrapolateRight: "clamp",
-  });
+  // Phase 1: Show the bad headline (0–30)
+  // Phase 2: Strikethrough / delete animation (30–60)
+  // Phase 3: New headline types in (60–100)
+  // Phase 4: Button rips from footer to top (100–160)
+  // Phase 5: Hold the final state (160–209)
 
-  const colors = [
-    { name: "White", hex: "#F5F5F5", bg: "#F5F5F5", text: "#0A0A0A", delay: 10 },
-    { name: "Black", hex: "#0A0A0A", bg: "#0A0A0A", text: "#F5F5F5", delay: 20 },
-    { name: "Color Splash", hex: "gradient", bg: BRAND.gradient, text: "#FFFFFF", delay: 30 },
-  ];
-
-  // Gradient sweep across bottom
-  const sweepWidth = interpolate(frame, [55, 85], [0, 100], {
+  // Bad headline strike-through
+  const strikeWidth = interpolate(frame, [30, 50], [0, 100], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.out(Easing.cubic),
+  });
+
+  const badOpacity = interpolate(frame, [50, 65], [1, 0.2], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  // New headline appears
+  const newHeadlineText = "We Save You 10 Hours a Week.";
+  const charsToShow = Math.floor(
+    interpolate(frame, [65, 100], [0, newHeadlineText.length], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    })
+  );
+  const typedText = newHeadlineText.slice(0, charsToShow);
+  const showCursor = frame >= 65 && frame <= 110 && Math.floor(frame / 8) % 2 === 0;
+
+  // New headline opacity
+  const newHeadlineOpacity = interpolate(frame, [60, 68], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  // Button animation - rip from bottom to top
+  const buttonInFooter = frame < 110;
+  const buttonY = interpolate(frame, [110, 145], [400, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.out(Easing.back(1.2)),
+  });
+
+  const buttonGlow = interpolate(frame, [145, 165], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  // Step labels
+  const step1Opacity = interpolate(frame, [25, 35], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  const step2Opacity = interpolate(frame, [60, 70], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  const step3Opacity = interpolate(frame, [105, 115], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  // "Sticky header" label
+  const stickyLabelOpacity = interpolate(frame, [150, 165], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  // Phone scale in
+  const phoneScale = spring({
+    frame,
+    fps,
+    config: { damping: 14, stiffness: 80, mass: 0.6 },
   });
 
   return (
@@ -484,612 +574,600 @@ const ColorPalette: React.FC = () => {
       style={{
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: BRAND.black,
+        backgroundColor: C.bg,
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          top: 120,
-          left: 120,
-          opacity: titleOpacity,
-        }}
-      >
+      {/* "THE FIX" header */}
+      <div style={{ position: "absolute", top: 60, left: 80 }}>
         <span
           style={{
             fontSize: 18,
-            fontFamily: BRAND.font,
+            fontFamily: C.font,
             fontWeight: 400,
-            color: BRAND.grey,
+            color: C.grey,
             letterSpacing: "6px",
             textTransform: "uppercase",
           }}
         >
-          03 — Color Palette
+          The Fix
         </span>
       </div>
 
-      {/* Color swatches */}
-      <div style={{ display: "flex", gap: 40, alignItems: "flex-end" }}>
-        {colors.map((color, i) => {
-          const s = spring({
-            frame: Math.max(0, frame - color.delay),
-            fps,
-            config: { damping: 12, stiffness: 100, mass: 0.5 },
-          });
+      <div style={{ display: "flex", alignItems: "center", gap: 80 }}>
+        {/* Phone mockup */}
+        <div
+          style={{
+            width: 340,
+            height: 620,
+            borderRadius: 32,
+            border: "3px solid #333",
+            backgroundColor: "#111",
+            overflow: "hidden",
+            transform: `scale(${phoneScale})`,
+            position: "relative",
+            flexShrink: 0,
+          }}
+        >
+          {/* Notch */}
+          <div
+            style={{
+              width: 120,
+              height: 24,
+              backgroundColor: "#111",
+              borderRadius: "0 0 16px 16px",
+              position: "absolute",
+              top: 0,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 20,
+              border: "1px solid #333",
+              borderTop: "none",
+            }}
+          />
 
-          const isGradient = color.hex === "gradient";
-
-          return (
+          {/* Sticky CTA button at top (after animation) */}
+          {!buttonInFooter && (
             <div
-              key={i}
               style={{
+                position: "absolute",
+                top: 30,
+                left: 0,
+                right: 0,
+                zIndex: 15,
                 display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 20,
-                transform: `scale(${s})`,
-                opacity: s,
+                justifyContent: "center",
+                padding: "8px 16px",
+                backgroundColor: "rgba(17,17,17,0.95)",
+                transform: `translateY(${buttonY}px)`,
               }}
             >
               <div
                 style={{
-                  width: isGradient ? 260 : 220,
-                  height: isGradient ? 300 : 260,
-                  borderRadius: 16,
-                  background: color.bg,
-                  border: color.name === "Black" ? "1px solid rgba(255,255,255,0.1)" : "none",
-                  boxShadow: isGradient ? "0 20px 60px rgba(255,60,172,0.3)" : "none",
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
+                  padding: "10px 40px",
+                  background: C.gradient,
+                  borderRadius: 8,
+                  boxShadow: `0 0 ${buttonGlow * 30}px rgba(255,60,172,${buttonGlow * 0.5})`,
                 }}
               >
-                <span
-                  style={{
-                    fontSize: isGradient ? 80 : 60,
-                    fontFamily: BRAND.font,
-                    fontWeight: 700,
-                    color: color.text,
-                  }}
-                >
-                  {isGradient ? "^" : "Aa"}
+                <span style={{ fontSize: 13, fontFamily: C.font, fontWeight: 700, color: "white", letterSpacing: "1px" }}>
+                  BUY NOW
                 </span>
               </div>
-              <span
-                style={{
-                  fontSize: 22,
-                  fontFamily: BRAND.font,
-                  fontWeight: 600,
-                  color: BRAND.white,
-                }}
-              >
-                {color.name}
-              </span>
-              <span
-                style={{
-                  fontSize: 14,
-                  fontFamily: BRAND.font,
-                  fontWeight: 400,
-                  color: BRAND.grey,
-                }}
-              >
-                {isGradient ? "Accent · Highlights · Focal Points" : color.hex}
+            </div>
+          )}
+
+          <div style={{ padding: "36px 16px 16px" }}>
+            {/* Nav */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ width: 60, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ width: 20, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+                <div style={{ width: 20, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+              </div>
+            </div>
+
+            {/* Hero section */}
+            <div style={{ marginBottom: 16, padding: "16px 0", minHeight: 80 }}>
+              {/* Old headline with strikethrough */}
+              <div style={{ position: "relative", opacity: badOpacity, marginBottom: 8 }}>
+                <span style={{ fontSize: 16, fontFamily: C.font, fontWeight: 600, color: "#555" }}>
+                  Welcome to Our Brand
+                </span>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: 0,
+                    width: `${strikeWidth}%`,
+                    height: 3,
+                    backgroundColor: C.red,
+                    borderRadius: 2,
+                  }}
+                />
+              </div>
+
+              {/* New headline */}
+              <div style={{ opacity: newHeadlineOpacity }}>
+                <span style={{ fontSize: 18, fontFamily: C.font, fontWeight: 800, color: C.white }}>
+                  {typedText}
+                </span>
+                {showCursor && (
+                  <span style={{ fontSize: 18, fontFamily: C.font, fontWeight: 300, color: C.hotPink }}>|</span>
+                )}
+              </div>
+            </div>
+
+            {/* Filler content */}
+            {[1, 2, 3].map((_, idx) => (
+              <div key={idx} style={{ marginBottom: 12 }}>
+                <div style={{ width: "100%", height: 40, backgroundColor: "#1A1A1A", borderRadius: 6, marginBottom: 5 }} />
+                <div style={{ width: "80%", height: 4, backgroundColor: "#1E1E1E", borderRadius: 2, marginBottom: 3 }} />
+                <div style={{ width: "60%", height: 4, backgroundColor: "#1E1E1E", borderRadius: 2 }} />
+              </div>
+            ))}
+
+            {/* Footer button (before it moves) */}
+            {buttonInFooter && (
+              <div style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
+                <div
+                  style={{
+                    padding: "8px 24px",
+                    backgroundColor: "#2A2A2A",
+                    borderRadius: 6,
+                    border: "1px solid #444",
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontFamily: C.font, fontWeight: 600, color: "#888" }}>
+                    Buy Now
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sticky Header label */}
+          {stickyLabelOpacity > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                top: 32,
+                right: -130,
+                opacity: stickyLabelOpacity,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <div style={{ width: 20, height: 2, background: C.green }} />
+              <span style={{ fontSize: 12, fontFamily: C.font, fontWeight: 600, color: C.green, letterSpacing: "1px" }}>
+                STICKY HEADER
               </span>
             </div>
-          );
-        })}
-      </div>
+          )}
+        </div>
 
-      {/* Gradient sweep bar at bottom */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          width: `${sweepWidth}%`,
-          height: 4,
-          background: BRAND.gradient,
-        }}
-      />
+        {/* Step indicators on the right */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 40, maxWidth: 500 }}>
+          {/* Step 1 */}
+          <div style={{ opacity: step1Opacity, display: "flex", alignItems: "flex-start", gap: 16 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                backgroundColor: C.red,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: 14, fontFamily: C.font, fontWeight: 700, color: "white" }}>1</span>
+            </div>
+            <div>
+              <span style={{ fontSize: 22, fontFamily: C.font, fontWeight: 700, color: C.white }}>
+                Delete the vague headline
+              </span>
+              <div style={{ marginTop: 4 }}>
+                <span style={{ fontSize: 14, fontFamily: C.font, fontWeight: 400, color: C.grey }}>
+                  &quot;Welcome to [Brand]&quot; says nothing
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2 */}
+          <div style={{ opacity: step2Opacity, display: "flex", alignItems: "flex-start", gap: 16 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                backgroundColor: C.green,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: 14, fontFamily: C.font, fontWeight: 700, color: "white" }}>2</span>
+            </div>
+            <div>
+              <span style={{ fontSize: 22, fontFamily: C.font, fontWeight: 700, color: C.white }}>
+                Replace with a clear benefit
+              </span>
+              <div style={{ marginTop: 4 }}>
+                <span style={{ fontSize: 14, fontFamily: C.font, fontWeight: 400, color: C.grey }}>
+                  &quot;We Save You 10 Hours a Week&quot;
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3 */}
+          <div style={{ opacity: step3Opacity, display: "flex", alignItems: "flex-start", gap: 16 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                background: C.gradient,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: 14, fontFamily: C.font, fontWeight: 700, color: "white" }}>3</span>
+            </div>
+            <div>
+              <span style={{ fontSize: 22, fontFamily: C.font, fontWeight: 700, color: C.white }}>
+                Pin the CTA button to the top
+              </span>
+              <div style={{ marginTop: 4 }}>
+                <span style={{ fontSize: 14, fontFamily: C.font, fontWeight: 400, color: C.grey }}>
+                  Visible 100% of the time
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </AbsoluteFill>
   );
 };
 
-// ─── Scene 5: Typography System ──────────────────────────────────
-const TypographyScene: React.FC = () => {
+// ─── Scene 4: Result + CTA (0:15–0:20 = frames 0–149) ───────────
+const ResultScene: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const titleOpacity = interpolate(frame, [0, 15], [0, 1], {
+  // Phase 1: Phone with focused heatmap (0–40)
+  // Phase 2: Purchase notification dings (40–70)
+  // Phase 3: "COMMENT 'CHECKLIST'" CTA (70–149)
+
+  const phoneScale = spring({
+    frame,
+    fps,
+    config: { damping: 12, stiffness: 80, mass: 0.6 },
+  });
+
+  // Focused heatmap glow on button
+  const heatFocus = interpolate(frame, [10, 35], [0, 1], {
+    extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
-  // "Inter" font name reveal
-  const fontNameScale = spring({
-    frame: frame - 8,
+  const heatPulse = 1 + Math.sin(frame * 0.15) * 0.15;
+
+  // Purchase notification
+  const notifY = spring({
+    frame: Math.max(0, frame - 40),
     fps,
     config: { damping: 10, stiffness: 120, mass: 0.5 },
   });
 
-  // Glitch effect: cycle through different font styles on the word "anything"
-  const glitchFonts = [
-    { family: "Georgia, serif", weight: 400, style: "italic" as const },
-    { family: "Courier New, monospace", weight: 700, style: "normal" as const },
-    { family: "Impact, sans-serif", weight: 400, style: "normal" as const },
-    { family: "Inter, sans-serif", weight: 900, style: "normal" as const },
-    { family: "Times New Roman, serif", weight: 400, style: "normal" as const },
-  ];
-
-  const glitchActive = frame >= 50 && frame <= 85;
-  const glitchIndex = glitchActive ? Math.floor((frame - 50) / 3) % glitchFonts.length : 3;
-  const currentGlitch = glitchFonts[glitchIndex];
-
-  // After glitch, settle on Inter
-  const settled = frame > 85;
-  const settledOpacity = interpolate(frame, [85, 95], [0, 1], {
+  const notifOpacity = interpolate(frame, [40, 50], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
-  const taglineOpacity = interpolate(frame, [20, 35], [0, 1], {
+  // CTA text
+  const ctaOpacity = interpolate(frame, [70, 85], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
-  const taglineSlide = interpolate(frame, [20, 38], [30, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
+  const ctaScale = spring({
+    frame: Math.max(0, frame - 70),
+    fps,
+    config: { damping: 10, stiffness: 100, mass: 0.5 },
   });
 
-  // Weight specimens
-  const weights = [
-    { label: "Light", weight: 300, delay: 25 },
-    { label: "Regular", weight: 400, delay: 30 },
-    { label: "Medium", weight: 500, delay: 35 },
-    { label: "Bold", weight: 700, delay: 40 },
-    { label: "Black", weight: 900, delay: 45 },
-  ];
+  // "3-Second Rule" label
+  const ruleOpacity = interpolate(frame, [55, 70], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
   return (
     <AbsoluteFill
       style={{
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: BRAND.black,
+        backgroundColor: C.bg,
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          top: 120,
-          left: 120,
-          opacity: titleOpacity,
-        }}
-      >
-        <span
+      <div style={{ display: "flex", alignItems: "center", gap: 100 }}>
+        {/* Phone with focused heat */}
+        <div
           style={{
-            fontSize: 18,
-            fontFamily: BRAND.font,
-            fontWeight: 400,
-            color: BRAND.grey,
-            letterSpacing: "6px",
-            textTransform: "uppercase",
+            width: 340,
+            height: 620,
+            borderRadius: 32,
+            border: "3px solid #333",
+            backgroundColor: "#111",
+            overflow: "hidden",
+            transform: `scale(${phoneScale})`,
+            position: "relative",
+            flexShrink: 0,
           }}
         >
-          04 — Typography
-        </span>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 40 }}>
-        {/* Font name */}
-        <div style={{ transform: `scale(${fontNameScale})`, opacity: fontNameScale }}>
-          <span
+          {/* Notch */}
+          <div
             style={{
-              fontSize: 110,
-              fontFamily: BRAND.font,
-              fontWeight: 200,
-              color: BRAND.white,
-              letterSpacing: "-3px",
+              width: 120,
+              height: 24,
+              backgroundColor: "#111",
+              borderRadius: "0 0 16px 16px",
+              position: "absolute",
+              top: 0,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 20,
+              border: "1px solid #333",
+              borderTop: "none",
+            }}
+          />
+
+          {/* Sticky CTA */}
+          <div
+            style={{
+              position: "absolute",
+              top: 30,
+              left: 0,
+              right: 0,
+              zIndex: 15,
+              display: "flex",
+              justifyContent: "center",
+              padding: "8px 16px",
+              backgroundColor: "rgba(17,17,17,0.95)",
             }}
           >
-            Inter
-          </span>
-        </div>
+            <div
+              style={{
+                padding: "10px 40px",
+                background: C.gradient,
+                borderRadius: 8,
+                boxShadow: `0 0 ${heatFocus * 40 * heatPulse}px rgba(255,60,172,${heatFocus * 0.6})`,
+              }}
+            >
+              <span style={{ fontSize: 13, fontFamily: C.font, fontWeight: 700, color: "white", letterSpacing: "1px" }}>
+                BUY NOW
+              </span>
+            </div>
+          </div>
 
-        {/* Weight specimens row */}
-        <div style={{ display: "flex", gap: 40, opacity: taglineOpacity, transform: `translateY(${taglineSlide}px)` }}>
-          {weights.map((w, i) => {
-            const wOpacity = interpolate(frame, [w.delay, w.delay + 10], [0, 1], {
-              extrapolateLeft: "clamp",
-              extrapolateRight: "clamp",
-            });
-            return (
-              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: wOpacity }}>
-                <span style={{ fontSize: 36, fontFamily: BRAND.font, fontWeight: w.weight, color: BRAND.white }}>
-                  Aa
-                </span>
-                <span style={{ fontSize: 12, fontFamily: BRAND.font, fontWeight: 400, color: BRAND.grey }}>
-                  {w.label}
-                </span>
+          <div style={{ padding: "36px 16px 16px" }}>
+            {/* Nav */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ width: 60, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ width: 20, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
+                <div style={{ width: 20, height: 8, backgroundColor: "#2A2A2A", borderRadius: 4 }} />
               </div>
-            );
-          })}
-        </div>
+            </div>
 
-        {/* Glitch tagline */}
-        <div style={{ marginTop: 20 }}>
-          <span style={{ fontSize: 40, fontFamily: BRAND.font, fontWeight: 300, color: BRAND.grey }}>
-            we can design{" "}
-          </span>
-          <span
+            {/* Good headline */}
+            <div style={{ marginBottom: 16, padding: "16px 0" }}>
+              <span style={{ fontSize: 18, fontFamily: C.font, fontWeight: 800, color: C.white }}>
+                We Save You 10 Hours a Week.
+              </span>
+            </div>
+
+            {/* Content */}
+            {[1, 2, 3].map((_, idx) => (
+              <div key={idx} style={{ marginBottom: 12 }}>
+                <div style={{ width: "100%", height: 40, backgroundColor: "#1A1A1A", borderRadius: 6, marginBottom: 5 }} />
+                <div style={{ width: "80%", height: 4, backgroundColor: "#1E1E1E", borderRadius: 2 }} />
+              </div>
+            ))}
+          </div>
+
+          {/* Focused heatmap - concentrated on the button */}
+          <div
             style={{
-              fontSize: 40,
-              fontFamily: settled ? BRAND.font : currentGlitch.family,
-              fontWeight: settled ? 700 : currentGlitch.weight,
-              fontStyle: settled ? "normal" : currentGlitch.style,
-              color: glitchActive ? "#FF3CAC" : BRAND.white,
-              opacity: settled ? settledOpacity : 1,
-              transition: settled ? "all 0.3s" : "none",
+              position: "absolute",
+              top: 25,
+              left: "50%",
+              transform: `translate(-50%, 0) scale(${heatPulse})`,
+              width: 200,
+              height: 80,
+              borderRadius: "50%",
+              background: `radial-gradient(ellipse, rgba(255,40,40,${heatFocus * 0.6}), rgba(255,100,0,${heatFocus * 0.3}) 40%, transparent 70%)`,
+              pointerEvents: "none",
+              zIndex: 16,
+            }}
+          />
+
+          {/* Purchase notification toast */}
+          <div
+            style={{
+              position: "absolute",
+              top: 70,
+              left: 16,
+              right: 16,
+              opacity: notifOpacity,
+              transform: `translateY(${interpolate(notifY, [0, 1], [-30, 0])}px)`,
+              zIndex: 30,
             }}
           >
-            anything^
-          </span>
-        </div>
-      </div>
-    </AbsoluteFill>
-  );
-};
-
-// ─── Scene 6: Brand Personality ──────────────────────────────────
-const BrandPersonality: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  const titleOpacity = interpolate(frame, [0, 15], [0, 1], {
-    extrapolateRight: "clamp",
-  });
-
-  const traits = [
-    { text: "Fluid", delay: 10 },
-    { text: "Adaptive", delay: 18 },
-    { text: "Experimental", delay: 26 },
-    { text: "Controlled", delay: 34 },
-  ];
-
-  // Central tagline
-  const taglineOpacity = interpolate(frame, [45, 60], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
-  // Glitch flicker on the tagline
-  const flickerOn = frame > 55 && frame < 70 ? (Math.sin(frame * 2.5) > 0 ? 1 : 0.7) : 1;
-
-  // Pulsing gradient border
-  const pulseScale = 1 + Math.sin(frame * 0.08) * 0.02;
-
-  return (
-    <AbsoluteFill
-      style={{
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: BRAND.black,
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 120,
-          left: 120,
-          opacity: titleOpacity,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 18,
-            fontFamily: BRAND.font,
-            fontWeight: 400,
-            color: BRAND.grey,
-            letterSpacing: "6px",
-            textTransform: "uppercase",
-          }}
-        >
-          05 — Brand Personality
-        </span>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 50 }}>
-        {/* Trait pills */}
-        <div style={{ display: "flex", gap: 24 }}>
-          {traits.map((trait, i) => {
-            const s = spring({
-              frame: Math.max(0, frame - trait.delay),
-              fps,
-              config: { damping: 10, stiffness: 100, mass: 0.5 },
-            });
-            return (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                backgroundColor: "rgba(46,204,113,0.15)",
+                border: `1px solid ${C.green}`,
+                borderRadius: 10,
+                padding: "10px 14px",
+              }}
+            >
               <div
-                key={i}
                 style={{
-                  padding: "14px 36px",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: 50,
-                  transform: `scale(${s})`,
-                  opacity: s,
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  backgroundColor: C.green,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{ color: "white", fontSize: 16, fontWeight: 700 }}>&#10003;</span>
+              </div>
+              <div>
+                <span style={{ fontSize: 12, fontFamily: C.font, fontWeight: 700, color: C.green }}>
+                  Purchase Confirmed!
+                </span>
+                <div>
+                  <span style={{ fontSize: 9, fontFamily: C.font, color: "#888" }}>
+                    Order #4821 — just now
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right side content */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 520 }}>
+          {/* 3-Second Rule */}
+          <div style={{ opacity: ruleOpacity }}>
+            <div
+              style={{
+                display: "inline-flex",
+                padding: "8px 20px",
+                border: `1px solid rgba(255,255,255,0.15)`,
+                borderRadius: 50,
+                marginBottom: 16,
+              }}
+            >
+              <span style={{ fontSize: 14, fontFamily: C.font, fontWeight: 500, color: C.grey, letterSpacing: "2px" }}>
+                THE 3-SECOND RULE
+              </span>
+            </div>
+            <div>
+              <span style={{ fontSize: 32, fontFamily: C.font, fontWeight: 300, color: C.white, lineHeight: 1.4 }}>
+                If they can&apos;t find your offer in{" "}
+              </span>
+              <span style={{ fontSize: 32, fontFamily: C.font, fontWeight: 800, color: C.hotPink }}>
+                3 seconds
+              </span>
+              <span style={{ fontSize: 32, fontFamily: C.font, fontWeight: 300, color: C.white }}>
+                , you&apos;ve already lost them.
+              </span>
+            </div>
+          </div>
+
+          {/* COMMENT CHECKLIST CTA */}
+          <div
+            style={{
+              opacity: ctaOpacity,
+              transform: `scale(${ctaScale})`,
+            }}
+          >
+            <div
+              style={{
+                padding: 4,
+                background: C.gradient,
+                borderRadius: 16,
+              }}
+            >
+              <div
+                style={{
+                  backgroundColor: C.bg,
+                  borderRadius: 12,
+                  padding: "28px 40px",
+                  textAlign: "center",
                 }}
               >
                 <span
                   style={{
-                    fontSize: 22,
-                    fontFamily: BRAND.font,
+                    fontSize: 20,
+                    fontFamily: C.font,
                     fontWeight: 400,
-                    color: BRAND.white,
-                    letterSpacing: "2px",
+                    color: C.grey,
                   }}
                 >
-                  {trait.text}
+                  COMMENT
+                </span>
+                <span
+                  style={{
+                    fontSize: 28,
+                    fontFamily: C.font,
+                    fontWeight: 900,
+                    background: C.gradient,
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    marginLeft: 10,
+                    marginRight: 10,
+                  }}
+                >
+                  &apos;CHECKLIST&apos;
+                </span>
+                <span
+                  style={{
+                    fontSize: 20,
+                    fontFamily: C.font,
+                    fontWeight: 400,
+                    color: C.grey,
+                  }}
+                >
+                  FOR THE PDF
                 </span>
               </div>
-            );
-          })}
-        </div>
-
-        {/* Central statement with gradient border */}
-        <div
-          style={{
-            padding: 4,
-            background: BRAND.gradient,
-            borderRadius: 20,
-            opacity: taglineOpacity * flickerOn,
-            transform: `scale(${pulseScale})`,
-          }}
-        >
-          <div
-            style={{
-              background: BRAND.black,
-              borderRadius: 16,
-              padding: "30px 60px",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 52,
-                fontFamily: BRAND.font,
-                fontWeight: 700,
-                color: BRAND.white,
-              }}
-            >
-              Glitched
-            </span>
-            <span
-              style={{
-                fontSize: 52,
-                fontFamily: BRAND.font,
-                fontWeight: 200,
-                color: BRAND.grey,
-                marginLeft: 16,
-              }}
-            >
-              but
-            </span>
-            <span
-              style={{
-                fontSize: 52,
-                fontFamily: BRAND.font,
-                fontWeight: 700,
-                background: BRAND.gradient,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                marginLeft: 16,
-              }}
-            >
-              Precise
-            </span>
+            </div>
           </div>
         </div>
-
-        {/* Subtitle */}
-        <span
-          style={{
-            fontSize: 20,
-            fontFamily: BRAND.font,
-            fontWeight: 300,
-            color: BRAND.grey,
-            opacity: taglineOpacity,
-            letterSpacing: "1px",
-          }}
-        >
-          A creative system, not a static agency
-        </span>
       </div>
     </AbsoluteFill>
   );
 };
 
-// ─── Scene 7: Outro / Logo Lockup ────────────────────────────────
-const Outro: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  // Everything fades in clean
-  const mainOpacity = interpolate(frame, [0, 25], [0, 1], {
-    extrapolateRight: "clamp",
-  });
-
-  const logoScale = spring({
-    frame: frame - 5,
-    fps,
-    config: { damping: 15, stiffness: 80, mass: 0.8 },
-  });
-
-  // Caret pulses gently
-  const caretGlow = 0.3 + Math.sin(frame * 0.1) * 0.15;
-
-  // Bottom line draws in
-  const lineWidth = interpolate(frame, [30, 60], [0, 300], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
-  });
-
-  // Fade to black at end
-  const fadeOut = interpolate(frame, [75, 90], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
-  return (
-    <AbsoluteFill
-      style={{
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: BRAND.black,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          opacity: mainOpacity,
-          transform: `scale(${logoScale})`,
-        }}
-      >
-        {/* Logo mark */}
-        <span
-          style={{
-            fontSize: 180,
-            fontFamily: BRAND.font,
-            fontWeight: 700,
-            background: BRAND.gradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            filter: `drop-shadow(0 0 ${caretGlow * 100}px rgba(255,60,172,0.4))`,
-            lineHeight: 1,
-          }}
-        >
-          ^
-        </span>
-
-        {/* Brand name */}
-        <div style={{ display: "flex", alignItems: "baseline", marginTop: -10 }}>
-          <span
-            style={{
-              fontSize: 64,
-              fontFamily: BRAND.font,
-              fontWeight: 700,
-              color: BRAND.white,
-              letterSpacing: "-1px",
-            }}
-          >
-            Sriracha
-          </span>
-          <span
-            style={{
-              fontSize: 64,
-              fontFamily: BRAND.font,
-              fontWeight: 700,
-              background: BRAND.gradient,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            ^
-          </span>
-          <span
-            style={{
-              fontSize: 64,
-              fontFamily: BRAND.font,
-              fontWeight: 200,
-              color: BRAND.grey,
-              marginLeft: 12,
-            }}
-          >
-            Creative
-          </span>
-        </div>
-
-        {/* Line */}
-        <div
-          style={{
-            width: lineWidth,
-            height: 2,
-            background: BRAND.gradient,
-            marginTop: 24,
-            borderRadius: 1,
-          }}
-        />
-
-        {/* Tagline */}
-        <span
-          style={{
-            fontSize: 18,
-            fontFamily: BRAND.font,
-            fontWeight: 300,
-            color: BRAND.grey,
-            letterSpacing: "8px",
-            textTransform: "uppercase",
-            marginTop: 20,
-            opacity: interpolate(frame, [40, 55], [0, 1], {
-              extrapolateLeft: "clamp",
-              extrapolateRight: "clamp",
-            }),
-          }}
-        >
-          We can design anything
-        </span>
-      </div>
-
-      {/* Fade to black overlay */}
-      <AbsoluteFill
-        style={{
-          backgroundColor: BRAND.black,
-          opacity: fadeOut,
-        }}
-      />
-    </AbsoluteFill>
-  );
-};
-
-// ─── Main Composition ────────────────────────────────────────────
+// ─── Main Composition (20s = 600 frames @ 30fps) ─────────────────
 export const MyVideo: React.FC = () => {
   return (
-    <AbsoluteFill style={{ backgroundColor: BRAND.black }}>
-      {/* Scene 1: Logo Reveal (0–89) ~3s */}
+    <AbsoluteFill style={{ backgroundColor: C.bg }}>
+      {/* Scene 1: Thumbnail Grid (0:00–0:03) = 90 frames */}
       <Sequence from={0} durationInFrames={90}>
-        <LogoReveal />
+        <ThumbnailGrid />
       </Sequence>
 
-      {/* Scene 2: The ^ Symbol (90–179) ~3s */}
-      <Sequence from={90} durationInFrames={90}>
-        <SymbolScene />
+      {/* Scene 2: Heatmap Zoom (0:03–0:08) = 150 frames */}
+      <Sequence from={90} durationInFrames={150}>
+        <HeatmapZoom />
       </Sequence>
 
-      {/* Scene 3: Logo Safe Area (180–269) ~3s */}
-      <Sequence from={180} durationInFrames={90}>
-        <SafeAreaScene />
+      {/* Scene 3: The Fix (0:08–0:15) = 210 frames */}
+      <Sequence from={240} durationInFrames={210}>
+        <TheFix />
       </Sequence>
 
-      {/* Scene 4: Color Palette (270–369) ~3.3s */}
-      <Sequence from={270} durationInFrames={100}>
-        <ColorPalette />
-      </Sequence>
-
-      {/* Scene 5: Typography (370–479) ~3.7s */}
-      <Sequence from={370} durationInFrames={110}>
-        <TypographyScene />
-      </Sequence>
-
-      {/* Scene 6: Brand Personality (480–569) ~3s */}
-      <Sequence from={480} durationInFrames={90}>
-        <BrandPersonality />
-      </Sequence>
-
-      {/* Scene 7: Outro (570–659) ~3s */}
-      <Sequence from={570} durationInFrames={90}>
-        <Outro />
+      {/* Scene 4: Result + CTA (0:15–0:20) = 150 frames */}
+      <Sequence from={450} durationInFrames={150}>
+        <ResultScene />
       </Sequence>
     </AbsoluteFill>
   );
